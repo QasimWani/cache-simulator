@@ -13,8 +13,7 @@ class Cache():
         self.block_size = block_size
         self.placement_type = placement_type # note: DM - 1; 2W - 2; 4W - 4; FA - None
         self.write_policy = write_policy
-        self.address_size = address_size
-
+        self.address_size = address_size / 8 #32-bit to bytes
         # compute offset
         self.offset = int(log2(block_size))
         # compute number of blocks per set
@@ -40,17 +39,10 @@ class Cache():
         Reads a block of memory from cache
         """
         offset, index, tag = self.getBits(address) #split address into offset, index (if placement_type != FA), tag
-        print(self.CACHE)
-        
         # in order to read from cache, check for cache hit first
         # check for cache size in cache-miss first and if possible, append. otherwise remove LRU block
         if(self.CACHE[index] is None): #miss, guaranteed to have some memory left.
-            self.miss_count += 1
-            self.transfer_mem_cache += self.address_size #transfer 32 bytes to memory
-            node = LinkedList.Node(0, tag) #create node with dirty and tag bits
-            dll  = LinkedList.DoublyLinkedList()
-            dll.LRU(node)
-            self.CACHE[index] = dll
+            self.load_new_block(tag, index, self.block_size)
         
         elif (node := self.CACHE[index].containsNodeWithValue(tag)) is not None: #hit
             self.hit_count += 1
@@ -59,7 +51,7 @@ class Cache():
         else: #append to set
             # check for memory size first, and only create new node if current_size < total_size
             self.miss_count += 1
-            self.transfer_mem_cache += self.address_size
+            self.transfer_mem_cache += self.block_size
             
             current_size = self.address_size * (self.miss_count + self.hit_count)
             node = LinkedList.Node(0, tag)
@@ -70,13 +62,45 @@ class Cache():
                 
             self.CACHE[index].LRU(node)
             
-
-
+    def load_new_block(self, tag, index, increment_count):
+        """ Loads a new block to cache on miss """
+        self.miss_count += 1
+        self.transfer_mem_cache += increment_count #transfer entire block to memory
+        node = LinkedList.Node(0, tag) #create node with dirty and tag bits
+        dll  = LinkedList.DoublyLinkedList()
+        dll.LRU(node)
+        self.CACHE[index] = dll
+        
     def store(self, address):
         """ 
         Stores a block of memory into cache
         """
-        pass
+        offset, index, tag = self.getBits(address) #split address into offset, index (if placement_type != FA), tag
+        # in order to write to cache, we need to check for cache hit first.
+        # but we also have to make sure that there's enough memory in cache to write to and the valid index has enough free blocks.
+        if(self.CACHE[index] is None): #miss, guaranteed to have some memory left.
+            self.load_new_block(tag, index, self.address_size)
+            self.transfer_cache_mem += self.address_size
+            
+        elif (node := self.CACHE[index].containsNodeWithValue(tag)) is not None: #hit
+            self.transfer_cache_mem += self.address_size
+            self.CACHE[index].LRU(node, True)
+            
+        else:
+            # check for memory size first, and only create new node if current_size < total_size
+            self.miss_count += 1
+            self.transfer_mem_cache += self.block_size
+            self.transfer_cache_mem += self.address_size
+            
+            current_size = self.address_size * (self.miss_count + self.hit_count)
+            node = LinkedList.Node(0, tag)
+
+            if(current_size >= self.cache_size or self.CACHE[index].getSize() >= self.num_blocks):
+                #remove LRU cache block.
+                self.CACHE[index].remove(self.CACHE[index].tail)
+                
+            self.CACHE[index].LRU(node)
+            
 
     def getBits(self, address):
         """ 
@@ -92,15 +116,19 @@ def to_bin(address):
     return bin(int(address, 16))[2:].zfill(32)[::-1]
 
 if __name__ == "__main__":
-    temp = Cache(1024, 4, None, "WB")
-    print("Num set", temp.num_set)
-    print("Num block", temp.num_blocks)
     
-    temp.read(to_bin("0x00000010"))
-    temp.read(to_bin("0x00000018"))
-    temp.read(to_bin("0x00000020"))
-    temp.read(to_bin("0x00000028"))
-    temp.read(to_bin("0x00000050"))
+    memory = LoadData("../data/simple5-4xWalk2020.trace").read()
+    cache = Cache(2048, 4, 1, "WT")
+    for instruction in memory:
+        policy, word = instruction
+        if(policy == "load"):
+            cache.read(word)
+        else:
+            cache.store(word)
+            
+    print("Num set", cache.num_set)
+    print("Num block", cache.num_blocks)
     
-    # print(temp.miss_count, temp.hit_count)
-    # print(temp.transfer_mem_cache)
+    print(cache.tag)
+    print(cache.miss_count, cache.hit_count)
+    print(cache.transfer_mem_cache, cache.transfer_cache_mem)

@@ -6,7 +6,7 @@ class LoadData():
         #assuming N x 2.
         self.filename = filename
     
-    def to_bin(address):
+    def to_bin(self, address):
         """ Convert hex string to 32 bit binary """
         return bin(int(address, 16))[2:].zfill(32)[::-1]
 
