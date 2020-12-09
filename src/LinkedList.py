@@ -72,6 +72,8 @@ class DoublyLinkedList:
         
     #Time: O(1) ; Space: O(1)
     def remove(self, node):
+        if node is None:
+            return #can't remove
         if(node == self.head): #dealing with head
             self.head = self.head.next #reassign head to new head
         if(node == self.tail): #dealing with tail

@@ -5,7 +5,7 @@ class LoadData():
     def __init__(self, filename):
         #assuming N x 2.
         self.filename = filename
-    
+        self.memory = []
     def to_bin(self, address):
         """ Convert hex string to 32 bit binary """
         return bin(int(address, 16))[2:].zfill(32)[::-1]
@@ -14,8 +14,11 @@ class LoadData():
         """ Read data from a file delimiterized by \n """
         f = open(self.filename,'r')
         content = f.readlines()
-        memory = []
         for data in content:
             function, address = data.strip().split("\t")
-            memory.append([function, self.to_bin(address)]) #simulate main memory
-        return memory
+            self.memory.append([function, self.to_bin(address)]) #simulate main memory
+        return self.memory
+    
+    def __len__(self):
+        """ Override the length property to return number of elements """
+        return len(self.memory)
